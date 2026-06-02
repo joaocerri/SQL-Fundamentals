@@ -274,3 +274,20 @@ FROM clients c
     JOIN projects p ON c.id = p.client_id
     JOIN time_entries te ON p.id = te.project_id
 GROUP BY c.id, c.nome, p.id, p.nome;
+CREATE VIEW v_user_profiles AS
+SELECT id, nome, email FROM users;
+
+CREATE VIEW v_master_time_logs AS
+SELECT te.id, te.descricao, te.inicio, te.fim, te.duracao_segundos, p.nome AS nome_projeto, c.nome AS nome_cliente FROM time_entries te
+JOIN projects p ON p.id = te.project_id
+JOIN clients c ON c.id = p.client_id; 
+
+CREATE VIEW v_project_dashboard AS 
+SELECT  p.id AS id_projeto, p.nome AS nome_projeto, c.nome AS nome_cliente, p.user_id, p.orcamento_horas, p.status FROM projects p 
+LEFT JOIN clients c ON c.id = p.client_id
+
+CREATE VIEW v_client_billing_summary AS
+SELECT c.id, c.nome, SUM(i.total_horas) AS horas_trabalhadas, SUM(i.valor_total) AS valor_total FROM clients c
+JOIN invoices i ON c.id = i.client_id
+WHERE i.status = 'pago'
+GROUP BY c.id, c.nome
