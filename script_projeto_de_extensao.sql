@@ -86,6 +86,16 @@ CREATE TABLE invoices (
     FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
 );
 
+CREATE TABLE project_logs(
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    data_alteracao DATETIME NOT NULL,
+    project_id INT NOT NULL,
+    project_status_old VARCHAR(50) DEFAULT 'em_andamento',
+    project_status_new VARCHAR(50) DEFAULT 'em_andamento',
+    , orcamento_horas_new DECIMAL(10, 2) NULL,
+    orcamento_horas_new DECIMAL(10, 2) NULL
+);
+
 INSERT INTO users (id, nome, email, plano) VALUES
 ('usr_001','João Cerri','joao1@email.com','pro'),
 ('usr_002','Maria Silva','maria@email.com','freemium'),
@@ -254,6 +264,8 @@ FROM time_entries te
     JOIN projects p ON te.project_id = p.id
 WHERE te.inicio BETWEEN '2026-04-01' AND '2026-04-30'
 ORDER BY te.inicio;
+-- Uso pretendido: selecionar os registros de tempo do mês de abril, juntamente com o usuário responsável, o projeto e a duração trabalhada.
+
 
 WITH horas_projeto AS (
 SELECT p.id, p.nome AS projeto, p.orcamento_horas,
@@ -291,3 +303,51 @@ SELECT c.id, c.nome, SUM(i.total_horas) AS horas_trabalhadas, SUM(i.valor_total)
 JOIN invoices i ON c.id = i.client_id
 WHERE i.status = 'pago'
 GROUP BY c.id, c.nome
+
+DELIMITER //
+CREATE TRIGGER tgr_prevent_paid_invoice_delete
+BEFORE DELETE
+ON invoices
+FOR EACH ROW
+BEGIN
+    IF (OLD.status = 'pago') THEN
+        SIGNAL SQLSTATE '45000' 
+        SET MESSAGE_TEXT = 'Não é possivel deletar uma fatura que ja foi paga';
+    END IF;
+END //
+DELIMITER ;
+
+DELIMITER //
+CREATE TRIGGER tgr_validate_hourly_rate
+BEFORE UPDATE 
+ON user_settings
+FOR EACH ROW
+BEGIN
+    IF (NEW.taxa_horaria_padrao < 0) THEN
+        SET NEW.taxa_horaria_padrao = 0;
+    END IF;
+END //
+DELIMITER ;
+
+
+DELIMITER //
+CREATE TRIGGER tgr_audit_project_changes
+AFTER UPDATE 
+ON projects
+FOR EACH ROW
+BEGIN
+    INSERT INTO project_logs (data_alteracao, project_id, project_status_old, project_status_new, orcamento_horas_old, orcamento_horas_new) VALUES
+    (NOW(), OLD.id, OLD.status, NEW.status, OLD.orcamento_horas , NEW.orcamento_horas);
+END //
+DELIMITER ;
+
+DELIMITER //
+CREATE TRIGGER tgr_calculate_duration
+BEFORE INSERT 
+ON time_entries
+FOR EACH ROW
+BEGIN
+    SET NEW.duracao_segundos = TIMESTAMPDIFF(SECOND, NEW.inicio, NEW.fim);
+END //
+DELIMITER ;
+-- 
